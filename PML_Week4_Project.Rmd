@@ -1,0 +1,140 @@
+---
+title: "PML_Week4_Project"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+
+#### This project focus on analysis of how well (the quality) that participant perform in a lift exercises. The sensors are on belt, forarm, arm and dumbel. Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E). Read more:  http://groupware.les.inf.puc-rio.br/har#ixzz5a9QMb32m
+
+
+
+## Exploratory Data
+
+#### load library and data
+```{r}
+setwd("~/R_MW_20180914/PMLWeek4")
+library(caret)
+library(corrplot)
+library(Hmisc)
+
+data.train <- read.csv("pml-training.csv")
+data.test <- read.csv("pml-testing.csv")
+
+dim(data.train)
+dim(data.test)
+```
+
+```{r}
+head(data.train)
+names(data.train)
+```
+
+
+## clean the data
+#### remove variable that over 90% is NA 
+```{r}
+Nval <- sapply(data.train, function(x) mean(is.na(x))) > 0.90
+
+clean.train <-data.train[,Nval == FALSE]
+clean.test <-data.test[,Nval== FALSE]
+
+dim(clean.train)
+dim(clean.test)
+
+```
+
+#### remove columns that are not relevant to accelerometer measurements
+```{r}
+trainRemove<- grepl("^X|timestamp|window", names(clean.train))
+clean.train<- clean.train[, !trainRemove]
+clean.train<- clean.train[, sapply(clean.train, is.numeric)]
+
+classe<- data.train$classe
+clean.train$classe <- classe
+
+testRemove<- grepl("^X|timestamp|window", names(clean.test))
+clean.test<- clean.test[, !testRemove]
+clean.test<- clean.test[, sapply(clean.test, is.numeric)]
+
+
+head(clean.train)
+head(clean.test)
+
+```
+
+## Correlation Matrix
+#### correlation plot: A quick look at correlations may suggest whether we could simplify the data set further by
+#### identifying pairs of strongly correlated variables:
+```{r}
+corr <- cor(clean.train[, -length(names(clean.train))])
+corr <- round(corr,2)
+corr[abs(corr)<0.8]<-0
+corrplot(corr, method="circle")
+```
+
+#### Filter only leave the variables that has the correlation over 80%
+
+
+## Subset data
+#### training set and testing set
+```{r}
+set.seed(620)
+inTrain <- createDataPartition(clean.train$classe, p=0.6, list=FALSE)
+training <- clean.train[inTrain,]
+testing <- clean.train[-inTrain,]
+
+dim(training)
+dim(testing)
+
+```
+
+```{r}
+head(training)
+head(testing)
+```
+
+
+## Decision Tree
+```{r}
+DT_modfit <- train(classe ~ ., data = training, method="rpart")
+
+DT_prediction <- predict(DT_modfit, testing)
+confusionMatrix(DT_prediction, testing$classe)
+
+```
+
+```{r}
+library(rpart)
+library(rpart.plot)
+rpart.plot(DT_modfit$finalModel, roundint=FALSE)
+```
+#### The prediction accuracy is 49% and D is unused which is not upto the desired level.
+
+## Random Forest Model
+```{r}
+RF_modfit <- train(classe ~ ., data = training, method = "rf", ntree = 50)
+```
+
+#### predict on test dataset
+
+```{r}
+RF_p <- predict(RF_modfit, testing)
+RF_pred_conf <- confusionMatrix(RF_p, testing$classe)
+RF_pred_conf
+```
+#### The prediction accuracy is 99% which is satisfied.
+
+
+## Final Predication
+#### predict on test dataset
+
+```{r}
+Final_RF_p <- predict(RF_modfit, data.test)
+Final_RF_p
+```
+
